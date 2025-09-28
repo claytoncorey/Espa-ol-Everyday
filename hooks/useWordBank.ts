@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { fetchInitialWord, fetchNewWords } from '../services/geminiService';
+import { fetchNewWords } from '../services/geminiService';
 import { LOCAL_STORAGE_KEY, DAILY_WORDS_COUNT } from '../constants';
 import type { Word, StoredData } from '../types';
 
@@ -13,6 +13,7 @@ export const useWordBank = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isAddingWord, setIsAddingWord] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isNewUser, setIsNewUser] = useState<boolean>(false);
 
   const loadAndProcessData = useCallback(async () => {
     setIsLoading(true);
@@ -26,15 +27,16 @@ export const useWordBank = () => {
       }
 
       if (!data || data.words.length === 0) { // First time user
-        console.log("First time user, fetching initial word.");
-        const initialWord = await fetchInitialWord();
-        const newWords = [initialWord];
-        const newData: StoredData = { words: newWords, lastLoginDate: today, dailyWordsCount: 1 };
-        setAllWords(newWords);
-        setDailyWords(newWords);
+        console.log("First time user, fetching initial words.");
+        setIsNewUser(true);
+        const initialWords = await fetchNewWords([], DAILY_WORDS_COUNT);
+        const newData: StoredData = { words: initialWords, lastLoginDate: today, dailyWordsCount: DAILY_WORDS_COUNT };
+        setAllWords(initialWords);
+        setDailyWords(initialWords);
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newData));
       } else if (data.lastLoginDate !== today) { // New day
         console.log("New day detected, fetching new words.");
+        setIsNewUser(false);
         const existingWordStrings = data.words.map(w => w.spanish);
         const newWords = await fetchNewWords(existingWordStrings, DAILY_WORDS_COUNT);
         const updatedWords = [...data.words, ...newWords];
@@ -45,6 +47,7 @@ export const useWordBank = () => {
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newData));
       } else { // Same day
         console.log("Returning user, same day.");
+        setIsNewUser(false);
         setAllWords(data.words);
         // Handle old data that might not have dailyWordsCount
         const count = data.dailyWordsCount || (data.words.length > 5 ? DAILY_WORDS_COUNT : data.words.length);
@@ -116,6 +119,7 @@ export const useWordBank = () => {
     learnedToday,
     isLoading,
     isAddingWord,
+    isNewUser,
     error,
     markAsLearned,
     addNewWord

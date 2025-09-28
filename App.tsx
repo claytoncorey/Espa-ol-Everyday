@@ -1,12 +1,13 @@
-
 import React from 'react';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useWordBank } from './hooks/useWordBank';
 import Header from './components/Header';
-import WordCard from './components/WordCard';
-import ProgressBar from './components/ProgressBar';
+import WordBubble from './components/WordCard';
 import LoadingSpinner from './components/LoadingSpinner';
 import Celebration from './components/Celebration';
+import AnimatedBackground from './components/AnimatedBackground';
+import CircularProgressBar from './components/ProgressBar';
+import SplashScreen from './components/SplashScreen';
 import { playSuccessChime, playCompletionFanfare } from './services/soundService';
 import type { Word } from './types';
 
@@ -20,10 +21,18 @@ function App() {
     error, 
     markAsLearned,
     addNewWord,
+    isNewUser,
   } = useWordBank();
   
   const [celebrateWord, setCelebrateWord] = useState(false);
   const [celebrateDay, setCelebrateDay] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    if (!isLoading) {
+      setShowSplash(isNewUser);
+    }
+  }, [isNewUser, isLoading]);
 
   const handleLearnWord = (word: Word) => {
     if (learnedToday.find(w => w.spanish === word.spanish)) return;
@@ -38,6 +47,11 @@ function App() {
     return dailyWords.length > 0 && learnedToday.length === dailyWords.length;
   }, [dailyWords, learnedToday]);
 
+  const currentWord = useMemo(() => {
+    if (isDayComplete) return null;
+    return dailyWords.find(dw => !learnedToday.some(lw => lw.spanish === dw.spanish));
+  }, [dailyWords, learnedToday, isDayComplete]);
+
   useEffect(() => {
     if (isDayComplete) {
       playCompletionFanfare();
@@ -49,76 +63,114 @@ function App() {
 
   const progress = dailyWords.length > 0 ? (learnedToday.length / dailyWords.length) * 100 : 0;
 
+  const bubbleGradient = isDayComplete
+    ? 'bg-gradient-to-br from-emerald-400 to-emerald-600'
+    : 'bg-gradient-to-br from-sky-500 to-sky-600';
+
+  if (isLoading && showSplash) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-50">
+        <AnimatedBackground />
+        {/* You can add a spinner here if initial load is slow */}
+      </div>
+    );
+  }
+
+  if (showSplash) {
+    return <SplashScreen onStart={() => setShowSplash(false)} />;
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-100 to-emerald-100 flex flex-col items-center p-4 sm:p-6 md:p-8 relative overflow-hidden">
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden">
+      <AnimatedBackground />
       {celebrateWord && <Celebration type="word" />}
       {celebrateDay && <Celebration type="day" />}
       
-      <Header totalLearned={allWords.length} />
+      <div className={`relative w-[95vmin] h-[95vmin] rounded-full flex flex-col items-center justify-center z-10 shadow-2xl text-white transition-colors duration-500 ${bubbleGradient}`}>
+        
+        <div className="absolute inset-0 w-full h-full pointer-events-none">
+          {!isDayComplete && currentWord && <CircularProgressBar progress={progress} />}
+        </div>
 
-      <main className="w-full max-w-4xl mx-auto flex-grow">
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center h-full mt-20">
-            <LoadingSpinner />
-            <p className="text-lg text-sky-700 font-semibold mt-4">Planting new words for you...</p>
-          </div>
-        )}
-        {error && (
-          <div className="flex items-center justify-center h-full mt-20 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg" role="alert">
-            <p><strong className="font-bold">Oh no!</strong> {error}</p>
-          </div>
-        )}
-        {!isLoading && !error && (
-          <>
-            <div className="my-8 text-center">
-              <h1 className="text-3xl sm:text-4xl font-black text-sky-800 tracking-tight">Your Words for Today</h1>
-              <p className="text-slate-500 mt-2">Learn these words to grow your vocabulary!</p>
+        <Header />
+
+        <main className="w-full flex-grow flex flex-col items-center justify-center z-0 p-4">
+          {isLoading && (
+            <div className="flex flex-col items-center justify-center h-full">
+              <LoadingSpinner />
+              <p className="text-lg text-sky-100 font-semibold mt-4">Planting new words for you...</p>
             </div>
-            
-            <div className="w-full max-w-lg mx-auto flex items-center gap-4 px-4 mb-8">
-              <div className="flex-grow">
-                <ProgressBar progress={progress} learnedCount={learnedToday.length} totalCount={dailyWords.length} />
-              </div>
-              <button
-                onClick={addNewWord}
-                disabled={isLoading || isAddingWord}
-                className="flex-shrink-0 flex items-center justify-center bg-sky-500 text-white font-bold h-12 w-12 rounded-full shadow-lg hover:bg-sky-600 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-opacity-75 disabled:bg-slate-400 disabled:cursor-not-allowed transform hover:scale-105 disabled:scale-100"
-                aria-label="Add a new word"
-              >
-                {isAddingWord ? (
-                  <div className="w-6 h-6 border-2 border-sky-100 border-t-transparent border-solid rounded-full animate-spin"></div>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
+          )}
+          {error && (
+            <div className="flex items-center justify-center text-center h-full bg-red-100/80 border border-red-400 text-red-700 px-4 py-3 rounded-lg max-w-xs" role="alert">
+              <p><strong className="font-bold">Oh no!</strong> {error}</p>
+            </div>
+          )}
+          {!isLoading && !error && (
+            <>
+              {isDayComplete ? (
+                <div className="w-full h-full flex flex-col justify-center items-center p-8 text-center animate-fade-in">
+                  <h2 className="font-black text-[clamp(2.5rem,12vmin,8rem)]">¡Excelente!</h2>
+                  <p className="mt-4 opacity-90 text-[clamp(1rem,3vmin,2rem)]">You've learned all your words for today!</p>
+                  <button
+                    onClick={addNewWord}
+                    disabled={isAddingWord}
+                    className="mt-6 flex items-center justify-center w-16 h-16 bg-white/30 text-white font-bold rounded-full shadow-lg hover:bg-white/40 backdrop-blur-sm transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/80 disabled:bg-slate-300/30 disabled:text-slate-100 disabled:cursor-not-allowed transform hover:scale-110 disabled:scale-100"
+                    aria-label="Learn one more word"
+                  >
+                    {isAddingWord ? (
+                      <div className="w-8 h-8 border-2 border-sky-100 border-t-white border-solid rounded-full animate-spin"></div>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              ) : currentWord ? (
+                 <div className="w-full h-full flex flex-col items-center justify-center gap-8 animate-fade-in">
+                    <WordBubble
+                      key={currentWord.spanish}
+                      word={currentWord}
+                      onLearn={handleLearnWord}
+                    />
+                  </div>
+              ) : (
+                  <div className="text-center my-8">
+                      <p className="text-slate-100 mt-4 text-lg">Loading your first word...</p>
+                  </div>
+              )}
+            </>
+          )}
+        </main>
+
+        <div className="absolute inset-x-0 bottom-0 h-[30%] z-10 pointer-events-none">
+            <svg width="100%" height="100%" viewBox="0 0 500 150" preserveAspectRatio="xMidYMax meet">
+                <path
+                  id="wordCountCurve"
+                  d="M 100,70 A 150,150 0 0,0 400,70"
+                  fill="none"
+                />
+                 <path
+                  id="footerCurve"
+                  d="M 50,40 A 200,200 0 0,0 450,40"
+                  fill="none"
+                />
+                {!isDayComplete && currentWord && (
+                    <text className="font-bold text-sky-100 fill-current" style={{ fontSize: 'clamp(0.7rem, 2vmin, 1.1rem)' }}>
+                       <textPath href="#wordCountCurve" startOffset="50%" textAnchor="middle">
+                        {allWords.length} {allWords.length === 1 ? 'Word' : 'Words'} Learned
+                      </textPath>
+                    </text>
                 )}
-              </button>
-            </div>
-
-
-            {isDayComplete ? (
-              <div className="text-center mt-12 bg-white/70 backdrop-blur-sm p-8 rounded-2xl shadow-lg animate-fade-in">
-                <h2 className="text-4xl font-black text-emerald-600">¡Excelente!</h2>
-                <p className="text-slate-600 mt-4 text-lg">You've learned all your words for today. Come back tomorrow for more, or add another word!</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8 mt-8">
-                {dailyWords.map((word) => (
-                  <WordCard
-                    key={word.spanish}
-                    word={word}
-                    onLearn={handleLearnWord}
-                    isLearned={learnedToday.some(learnedWord => learnedWord.spanish === word.spanish)}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </main>
-      <footer className="text-center py-4 text-slate-500 text-sm">
-        <p>Español Everyday</p>
-      </footer>
+                <text className="text-sky-200/80 fill-current" style={{ fontSize: 'clamp(0.6rem, 1.5vmin, 0.9rem)' }}>
+                    <textPath href="#footerCurve" startOffset="50%" textAnchor="middle">
+                        Designed by Clayton Corey
+                    </textPath>
+                </text>
+            </svg>
+        </div>
+      </div>
     </div>
   );
 }
